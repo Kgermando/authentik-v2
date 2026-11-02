@@ -1,0 +1,29 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+coverage/
+# Plateformes générées localement avec `flutter create` conservées dans le dépôt :
+# windows/, macos/, linux/ sont versionnés. Ignorer seulement les artefacts.
+**/Flutter/ephemeral/
+**/ephemeral/
+**/.symlinks/
+**/Pods/
+# Local
+settings.json
+*.log
+.env
+# Signature MSIX (tool/signing/create_cert.ps1)
+tool/signing/authentik_codesign.pfx
+tool/signing/.cert_password
+tool/signing/authentik_codesign.cer
+tool/dist/Authentik_v2.msix
+tool/dist/Authentik_v2_Publisher.cer
