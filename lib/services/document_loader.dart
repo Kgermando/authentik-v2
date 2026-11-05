@@ -7,9 +7,12 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfrx/pdfrx.dart';
 
+import '../core/i18n.dart';
 import '../core/models.dart';
 import 'analyzer/analyzer.dart';
 import 'analyzer/metadata_check.dart';
+import 'image_dpi.dart';
+import 'reference/reference_context.dart';
 
 const supportedExtensions = <String>{
   'pdf',
@@ -32,7 +35,12 @@ bool isSupportedFile(String path) {
 ///
 /// Le document n'est jamais copié ni enregistré : il vit en mémoire le temps
 /// de l'analyse.
-Future<AnalysisJob> prepareJob(String path, VerificationProfile profile) async {
+Future<AnalysisJob> prepareJob(
+  String path,
+  VerificationProfile profile, {
+  String acquisition = Acquisition.fichier,
+  ReferenceContext? reference,
+}) async {
   final file = File(path);
   if (!await file.exists()) {
     throw FileSystemException('Fichier introuvable', path);
@@ -46,7 +54,8 @@ Future<AnalysisJob> prepareJob(String path, VerificationProfile profile) async {
   if (bytes.isEmpty) throw const FormatException('Le fichier est vide.');
   final sha = sha256.convert(bytes).toString();
   final meta = readFileMeta(bytes);
-  final isPdf = bytes.length > 4 &&
+  final isPdf =
+      bytes.length > 4 &&
       bytes[0] == 0x25 &&
       bytes[1] == 0x50 &&
       bytes[2] == 0x44 &&
@@ -91,6 +100,9 @@ Future<AnalysisJob> prepareJob(String path, VerificationProfile profile) async {
             height: ih,
             kind: 'bgra',
             data: TransferableTypedData.fromList([px]),
+            // Taille de la page en points : millimètres exacts.
+            pageWidthPt: page.width,
+            pageHeightPt: page.height,
           ),
         );
       }
@@ -105,6 +117,7 @@ Future<AnalysisJob> prepareJob(String path, VerificationProfile profile) async {
         height: 0,
         kind: 'encoded',
         data: TransferableTypedData.fromList([bytes]),
+        declaredDpi: readDeclaredDpi(bytes),
       ),
     );
   }
@@ -118,5 +131,8 @@ Future<AnalysisJob> prepareJob(String path, VerificationProfile profile) async {
     profile: profile.toJson(),
     meta: meta,
     warnings: warnings,
+    acquisition: acquisition,
+    texts: Textes.all,
+    reference: reference,
   );
 }

@@ -1,8 +1,14 @@
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
+import '../../core/i18n.dart';
 import '../../core/models.dart';
+import '../../core/page_scale.dart';
 import '../../core/scoring.dart';
+import '../../core/scoring_params.dart';
+import '../reference/ref_image.dart';
+import '../reference/reference_checks.dart';
+import '../reference/reference_context.dart';
 import 'copy_move.dart';
 import 'cv_adapter.dart' as cvx;
 import 'grid_checks.dart';
@@ -19,6 +25,9 @@ class PageInput {
     required this.height,
     required this.kind,
     required this.data,
+    this.declaredDpi,
+    this.pageWidthPt,
+    this.pageHeightPt,
   });
 
   final int index;
@@ -28,6 +37,13 @@ class PageInput {
   /// "bgra" ou "encoded".
   final String kind;
   final TransferableTypedData data;
+
+  /// Résolution lue dans l'en-tête de l'image (null si absente).
+  final DeclaredDpi? declaredDpi;
+
+  /// Taille de la page PDF en points (null pour une image).
+  final double? pageWidthPt;
+  final double? pageHeightPt;
 }
 
 class AnalysisJob {
@@ -40,7 +56,30 @@ class AnalysisJob {
     required this.profile,
     required this.meta,
     required this.warnings,
+    this.acquisition = Acquisition.fichier,
+    this.texts = const {},
+    this.reference,
+    this.identicalOriginal,
   });
+
+  /// Même tâche avec le référentiel chargé et l'original identique trouvé.
+  AnalysisJob withReference(
+    ReferenceContext? reference, {
+    KnownOriginal? identicalOriginal,
+  }) => AnalysisJob(
+    id: id,
+    fileName: fileName,
+    source: source,
+    sha256: sha256,
+    pages: pages,
+    profile: profile,
+    meta: meta,
+    warnings: warnings,
+    acquisition: acquisition,
+    texts: texts,
+    reference: reference,
+    identicalOriginal: identicalOriginal,
+  );
 
   final String id;
   final String fileName;
@@ -50,7 +89,89 @@ class AnalysisJob {
   final Map<String, dynamic> profile;
   final FileMeta meta;
   final List<String> warnings;
+
+  /// Voie d'acquisition (fichier, dossier surveillé, scanner).
+  final String acquisition;
+
+  /// Textes d'interface (l'isolat d'analyse ne lit pas les assets).
+  final Map<String, String> texts;
+
+  /// Référentiel de l'année d'émission choisie (null : aucune année).
+  final ReferenceContext? reference;
+
+  /// Original du référentiel dont le fichier analysé est la copie exacte
+  /// (même SHA-256), pour l'année chargée.
+  final KnownOriginal? identicalOriginal;
 }
+
+/// Original enregistré reconnu (fichier identique).
+class KnownOriginal {
+  const KnownOriginal({
+    required this.specimenId,
+    required this.label,
+    required this.year,
+  });
+
+  final String specimenId;
+  final String label;
+  final int year;
+}
+
+/// Contrôles du référentiel qui concluent à une copie ou une modification
+/// d'un original.
+const _copyChecks = {
+  CheckId.sealCopy,
+  CheckId.signatureCopy,
+  CheckId.originalModified,
+};
+
+/// Le document est un original du référentiel (fichier identique, ou rescan
+/// sans aucune différence locale au-delà du bruit de scan) :
+/// - fichier identique : les contrôles de copie ne peuvent pas conclure à une
+///   copie frauduleuse de lui-même ;
+/// - les indices génériques (métadonnées, encre, grain, compression…) sont
+///   aussi présents sur l'original validé : ils ne peuvent pas signaler une
+///   falsification et ne pèsent plus, mesure conservée pour la traçabilité.
+List<CheckResult> neutralizeForOriginal(
+  List<CheckResult> results, {
+  required String label,
+  required bool identicalFile,
+}) => [
+  for (final r in results)
+    if (identicalFile &&
+        _copyChecks.contains(r.id) &&
+        (r.status == CheckStatus.failed || r.status == CheckStatus.warning))
+      CheckResult(
+        id: r.id,
+        score: 0,
+        status: CheckStatus.passed,
+        confidence: r.confidence,
+        summary: tr('ref.fichier_identique', {'original': label}),
+        version: r.version,
+        durationMs: r.durationMs,
+        critical: r.critical,
+        details: {...r.details, 'fichier_identique': true},
+      )
+    else if (r.status == null && !r.skipped && r.score > 0)
+      CheckResult(
+        id: r.id,
+        score: r.score,
+        status: CheckStatus.notApplicable,
+        summary: tr('ref.indice_original', {
+          'original': label,
+          'mesure': r.summary,
+        }),
+        version: r.version,
+        durationMs: r.durationMs,
+        details: {
+          ...r.details,
+          'neutralise_original': label,
+          'score_mesure': r.score,
+        },
+      )
+    else
+      r,
+];
 
 typedef ProgressCallback = void Function(double fraction, String stage);
 
@@ -104,10 +225,7 @@ void _entry(List<Object> args) {
   final send = args[0] as SendPort;
   final job = args[1] as AnalysisJob;
   try {
-    final r = analyzeSync(
-      job,
-      (f, s) => send.send(['progress', f, s]),
-    );
+    final r = analyzeSync(job, (f, s) => send.send(['progress', f, s]));
     send.send(['done', r]);
   } catch (e, st) {
     send.send(['error', '$e\n$st']);
@@ -117,6 +235,7 @@ void _entry(List<Object> args) {
 /// Analyse complète, synchrone (appelée dans l'isolat, ou directement en test).
 AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
   final sw = Stopwatch()..start();
+  if (job.texts.isNotEmpty && !Textes.loaded) Textes.load(job.texts);
   final profile = VerificationProfile.fromJson(job.profile);
   final on = profile.enabled;
   final warnings = [...job.warnings];
@@ -124,12 +243,26 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
   progress(0.02, 'Préparation des pages');
   final pages = <PageContext>[];
   final previews = <PagePreview>[];
+  final scales = <PageScale>[];
+  final qualityNotes = <String>[];
+  // Page pleine résolution pour le référentiel (sceau, empreinte de page) :
+  // première page seulement, et seulement si une année est choisie.
+  RefImage? refPage;
   for (var i = 0; i < job.pages.length; i++) {
     final p = job.pages[i];
     final bytes = p.data.materialize().asUint8List();
-    final img = p.kind == 'bgra'
-        ? cvx.bgraToBgr(bytes, p.width, p.height)
-        : cvx.decodeImage(bytes);
+    final cvx.BgrImage img;
+    if (i == 0 && job.reference != null) {
+      final full = p.kind == 'bgra'
+          ? cvx.bgraToBgr(bytes, p.width, p.height, maxSide: cvx.kFullSide)
+          : cvx.decodeImage(bytes, maxSide: cvx.kFullSide);
+      refPage = RefImage(full.w, full.h, full.bgr);
+      img = cvx.shrink(full);
+    } else {
+      img = p.kind == 'bgra'
+          ? cvx.bgraToBgr(bytes, p.width, p.height)
+          : cvx.decodeImage(bytes);
+    }
     final ctx = PageContext(p.index, img.w, img.h, img.bgr);
     pages.add(ctx);
     previews.add(
@@ -140,7 +273,12 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
         jpeg: cvx.encodePreview(img),
       ),
     );
-    _pageWarnings(ctx, img, p.index, job.pages.length > 1, warnings);
+    final multi = job.pages.length > 1;
+    _pageWarnings(ctx, img, p.index, multi, warnings);
+    final scale = _pageScale(p, img);
+    scales.add(scale);
+    _scaleWarning(scale, p.index, multi, warnings);
+    _pageQuality(ctx, img, p.index, multi, qualityNotes);
     progress(0.02 + 0.2 * (i + 1) / job.pages.length, 'Préparation des pages');
   }
 
@@ -163,40 +301,54 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
   }
 
   final results = <CheckResult>[];
+  final t = Stopwatch();
+  void add(CheckResult r) => results.add(r.timed(t.elapsedMilliseconds));
 
   if (on.contains(CheckId.metadata)) {
     progress(0.25, 'Lecture des métadonnées');
-    results.add(metadataCheck(job.meta));
+    t
+      ..reset()
+      ..start();
+    add(metadataCheck(job.meta));
     tick('Métadonnées vérifiées');
   }
 
   List<OverlayResult>? perPage;
   if (steps.contains('overlay')) {
     progress(0.3, 'Recherche des sceaux et signatures');
+    // La détection est commune au sceau et à la signature : sa durée est
+    // comptée dans chacun des deux contrôles.
+    t
+      ..reset()
+      ..start();
     perPage = [for (final c in pages) detectOverlays(c)];
+    final shared = t.elapsedMilliseconds;
     if (on.contains(CheckId.sealOverlay)) {
-      results.add(
-        overlayCheckResult(
-          CheckId.sealOverlay,
-          [for (final o in perPage) o.seals],
-          pages,
-        ),
-      );
+      t
+        ..reset()
+        ..start();
+      final r = overlayCheckResult(CheckId.sealOverlay, [
+        for (final o in perPage) o.seals,
+      ], pages);
+      results.add(r.timed(shared + t.elapsedMilliseconds));
     }
     if (on.contains(CheckId.signatureOverlay)) {
-      results.add(
-        overlayCheckResult(
-          CheckId.signatureOverlay,
-          [for (final o in perPage) o.signatures],
-          pages,
-        ),
-      );
+      t
+        ..reset()
+        ..start();
+      final r = overlayCheckResult(CheckId.signatureOverlay, [
+        for (final o in perPage) o.signatures,
+      ], pages);
+      results.add(r.timed(shared + t.elapsedMilliseconds));
     }
     tick('Sceaux et signatures analysés');
   }
 
   if (on.contains(CheckId.textConsistency)) {
     progress(0.5, 'Comparaison de l’encre et des dates');
+    t
+      ..reset()
+      ..start();
     final excl = [
       for (var i = 0; i < pages.length; i++)
         [
@@ -204,31 +356,36 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
           ...?perPage?[i].signatures.map((e) => e.rect),
         ],
     ];
-    results.add(textConsistency(pages, excl));
+    add(textConsistency(pages, excl));
     tick('Texte et dates analysés');
   }
 
   if (on.contains(CheckId.noiseConsistency)) {
     progress(0.65, 'Cohérence du grain du papier');
-    results.add(noiseConsistency(pages));
+    t
+      ..reset()
+      ..start();
+    add(noiseConsistency(pages));
     tick('Grain du papier analysé');
   }
 
   if (on.contains(CheckId.ela)) {
     progress(0.75, 'Niveaux de compression');
-    final re = [
-      for (final c in pages) cvx.recompressGray(c.gray, c.w, c.h),
-    ];
-    results.add(errorLevelAnalysis(pages, re));
+    t
+      ..reset()
+      ..start();
+    final re = [for (final c in pages) cvx.recompressGray(c.gray, c.w, c.h)];
+    add(errorLevelAnalysis(pages, re));
     tick('Compression analysée');
   }
 
   if (on.contains(CheckId.copyMove)) {
     progress(0.85, 'Recherche d’éléments dupliqués');
-    final pairs = [
-      for (final c in pages) cvx.orbSelfMatches(c.gray, c.w, c.h),
-    ];
-    results.add(
+    t
+      ..reset()
+      ..start();
+    final pairs = [for (final c in pages) cvx.orbSelfMatches(c.gray, c.w, c.h)];
+    add(
       copyMoveFromPairs(
         pairs,
         [for (final c in pages) c.index],
@@ -239,9 +396,71 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
     tick('Duplications recherchées');
   }
 
+  // Référentiel annuel : non applicable sans année choisie.
+  var referenceUnusable = false;
+  if (on.any(kReferenceChecks.contains)) {
+    progress(0.9, 'Comparaison au référentiel de l’année');
+    final outcome = runReferenceChecks(
+      ctx: job.reference,
+      page: refPage,
+      scale: scales.isEmpty ? null : scales.first,
+      acquisition: job.acquisition,
+    );
+    for (final r in outcome.results) {
+      if (on.contains(r.id)) results.add(r);
+    }
+    // Fichier identique à un original : c'est cet original lui-même, ce qui
+    // ne dépend pas du nombre d'originaux de l'année (pas de « non
+    // concluant » pour référentiel insuffisant).
+    final identical = job.identicalOriginal;
+    final ctx = job.reference;
+    final insufficient = {
+      if (ctx != null) ...[
+        tr('ref.non_concluant', {'annee': ctx.claimedYear}),
+        tr('ref.non_concluant', {'annee': ctx.yearLabel}),
+      ],
+    };
+    referenceUnusable = outcome.unusable && identical == null;
+    warnings.addAll(
+      identical == null
+          ? outcome.notes
+          : outcome.notes.where((n) => !insufficient.contains(n)),
+    );
+
+    // Document reconnu comme un original du référentiel.
+    String? originalLabel = identical?.label;
+    if (originalLabel == null && outcome.rescanOf != null) {
+      for (final p in job.reference?.prints ?? const <SpecimenPrint>[]) {
+        if (p.specimenId == outcome.rescanOf) originalLabel = p.label;
+      }
+    }
+    if (originalLabel != null) {
+      final neutral = neutralizeForOriginal(
+        results,
+        label: originalLabel,
+        identicalFile: identical != null,
+      );
+      results
+        ..clear()
+        ..addAll(neutral);
+      warnings.add(
+        tr(
+          identical != null ? 'ref.note_fichier_identique' : 'ref.note_rescan',
+          {'original': originalLabel},
+        ),
+      );
+    }
+  }
+
   progress(0.97, 'Calcul du score');
-  final p = Scoring.combine(results, profile);
-  final verdict = Scoring.verdict(p, profile.threshold);
+  final decision = Scoring.decide(
+    results,
+    profile,
+    qualityInsufficient: qualityNotes.isNotEmpty || referenceUnusable,
+  );
+  warnings
+    ..addAll(qualityNotes)
+    ..addAll(decision.notes);
   sw.stop();
   progress(1.0, 'Terminé');
 
@@ -252,14 +471,30 @@ AnalysisResult analyzeSync(AnalysisJob job, ProgressCallback progress) {
     source: job.source,
     createdAt: DateTime.now(),
     elapsedMs: sw.elapsedMilliseconds,
-    probability: p,
-    verdict: verdict,
+    probability: decision.probability,
+    verdict: decision.verdict,
     threshold: profile.threshold,
     profileName: profile.name,
     checks: results,
     warnings: warnings,
     previews: previews,
+    acquisition: job.acquisition,
+    pageScales: scales,
+    forcedByCritical: decision.forcedByCritical,
+    qualityInsufficient: qualityNotes.isNotEmpty,
+    referenceYearId: job.reference?.yearId,
+    claimedYear: job.reference?.claimedYear,
+    calibrationIds: job.reference?.calibrationIds ?? const [],
   );
+}
+
+/// Gradient moyen d'une page (un pixel sur sept), calcul d'origine.
+double _meanGradient(PageContext c) {
+  var sum = 0.0;
+  for (var i = 0; i < c.grad.length; i += 7) {
+    sum += c.grad[i];
+  }
+  return sum / (c.grad.length / 7);
 }
 
 void _pageWarnings(
@@ -271,7 +506,7 @@ void _pageWarnings(
 ) {
   final label = multi ? 'Page ${index + 1} : ' : '';
   final shortSide = math.min(img.srcW, img.srcH);
-  if (shortSide < 1000) {
+  if (shortSide < ScoringParams.minShortSidePx) {
     out.add(
       '${label}résolution faible (${img.srcW}×${img.srcH}). '
       'Rescannez à 300 DPI minimum pour une analyse fiable.',
@@ -286,12 +521,65 @@ void _pageWarnings(
   if (c.paperGray < 140) {
     out.add('${label}scan sombre ou peu contrasté : fiabilité réduite.');
   }
-  var sum = 0.0;
-  for (var i = 0; i < c.grad.length; i += 7) {
-    sum += c.grad[i];
-  }
-  final meanGrad = sum / (c.grad.length / 7);
-  if (meanGrad < 1.2) {
+  if (_meanGradient(c) < ScoringParams.blurMeanGradient) {
     out.add('${label}image floue : fiabilité réduite.');
   }
+}
+
+/// Qualité insuffisante pour conclure : résolution trop basse, ou page floue
+/// qui n'est pas blanche (un verso blanc n'a pas de contours, il n'est pas
+/// « flou »).
+void _pageQuality(
+  PageContext c,
+  cvx.BgrImage img,
+  int index,
+  bool multi,
+  List<String> out,
+) {
+  final prefixe = multi ? tr('page.prefixe', {'n': index + 1}) : '';
+  if (math.min(img.srcW, img.srcH) < ScoringParams.minShortSidePx) {
+    out.add(
+      tr('qualite.insuffisante.resolution', {
+        'prefixe': prefixe,
+        'w': img.srcW,
+        'h': img.srcH,
+      }),
+    );
+    return;
+  }
+  final blank = c.flatFraction >= ScoringParams.blankPageFlatFraction;
+  if (!blank && _meanGradient(c) < ScoringParams.blurMeanGradient) {
+    out.add(tr('qualite.insuffisante.floue', {'prefixe': prefixe}));
+  }
+}
+
+/// Échelle physique de la page source (avant réduction pour l'analyse).
+PageScale _pageScale(PageInput p, cvx.BgrImage img) {
+  final wPt = p.pageWidthPt;
+  final hPt = p.pageHeightPt;
+  if (wPt != null && hPt != null && wPt > 0 && hPt > 0) {
+    return PageScale.fromPdf(
+      pxW: img.srcW,
+      pxH: img.srcH,
+      widthPt: wPt,
+      heightPt: hPt,
+    );
+  }
+  return PageScale.fromImage(
+    pxW: img.srcW,
+    pxH: img.srcH,
+    declared: p.declaredDpi,
+  );
+}
+
+void _scaleWarning(PageScale s, int index, bool multi, List<String> out) {
+  if (s.reliability != ScaleReliability.incertain) return;
+  out.add(
+    tr('dpi.incertain', {
+      'prefixe': multi ? tr('page.prefixe', {'n': index + 1}) : '',
+      'wmm': s.widthMm.round(),
+      'hmm': s.heightMm.round(),
+      'dpi': s.dpi.round(),
+    }),
+  );
 }

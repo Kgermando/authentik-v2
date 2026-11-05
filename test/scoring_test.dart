@@ -36,10 +36,9 @@ void main() {
     final off = profile.copy()..enabled.remove(CheckId.sealOverlay);
     expect(Scoring.combine([_r(CheckId.sealOverlay, 1)], off), 0);
     expect(
-      Scoring.combine(
-        [const CheckResult(id: CheckId.ela, score: 1, skipped: true)],
-        profile,
-      ),
+      Scoring.combine([
+        const CheckResult(id: CheckId.ela, score: 1, skipped: true),
+      ], profile),
       0,
     );
   });
@@ -59,24 +58,27 @@ void main() {
     expect(back.threshold, profile.threshold);
   });
 
-  test('restauration des profils par défaut conserve les profils personnalisés', () {
-    final custom = VerificationProfile(
-      id: 'mon-profil',
-      name: 'Perso',
-      enabled: {CheckId.metadata},
-      threshold: 0.8,
-    );
-    final altered = VerificationProfile.defaults().first.copy()
-      ..name = 'Standard modifié'
-      ..threshold = 0.9;
-    final list = [altered, ...VerificationProfile.defaults().skip(1), custom];
-    final restored = VerificationProfile.withRestoredDefaults(list);
-    expect(restored.length, 4);
-    expect(restored.any((p) => p.id == 'mon-profil'), isTrue);
-    final standard = restored.firstWhere((p) => p.id == 'standard');
-    expect(standard.name, 'Standard');
-    expect(standard.threshold, 0.70);
-    expect(restored.firstWhere((p) => p.id == 'certificats').threshold, 0.65);
-    expect(restored.firstWhere((p) => p.id == 'rapide').maxPages, 1);
-  });
+  test(
+    'restauration des profils par défaut conserve les profils personnalisés',
+    () {
+      final custom = VerificationProfile(
+        id: 'mon-profil',
+        name: 'Perso',
+        enabled: {CheckId.metadata},
+        threshold: 0.8,
+      );
+      final altered = VerificationProfile.defaults().first.copy()
+        ..name = 'Standard modifié'
+        ..threshold = 0.9;
+      final list = [altered, ...VerificationProfile.defaults().skip(1), custom];
+      final restored = VerificationProfile.withRestoredDefaults(list);
+      expect(restored.length, 4);
+      expect(restored.any((p) => p.id == 'mon-profil'), isTrue);
+      final standard = restored.firstWhere((p) => p.id == 'standard');
+      expect(standard.name, 'Standard');
+      expect(standard.threshold, 0.70);
+      expect(restored.firstWhere((p) => p.id == 'certificats').threshold, 0.65);
+      expect(restored.firstWhere((p) => p.id == 'rapide').maxPages, 1);
+    },
+  );
 }

@@ -75,10 +75,12 @@ class PageContext {
       for (var bx = 0; bx < gw; bx++) {
         final a = (cell * cell).toDouble();
         blockMeans.add(
-          grayInt.sum(bx * cell, by * cell, (bx + 1) * cell, (by + 1) * cell) / a,
+          grayInt.sum(bx * cell, by * cell, (bx + 1) * cell, (by + 1) * cell) /
+              a,
         );
         blockSats.add(
-          satInt.sum(bx * cell, by * cell, (bx + 1) * cell, (by + 1) * cell) / a,
+          satInt.sum(bx * cell, by * cell, (bx + 1) * cell, (by + 1) * cell) /
+              a,
         );
       }
     }
@@ -100,7 +102,8 @@ class PageContext {
         final yu = y > 0 ? gray[i - w] : gray[i];
         final yd = y < h - 1 ? gray[i + w] : gray[i];
         grad[i] = math.min(255, (xr - xl).abs() + (yd - yu).abs());
-        final mean3 = grayInt.sum(x - 1, y - 1, x + 2, y + 2) /
+        final mean3 =
+            grayInt.sum(x - 1, y - 1, x + 2, y + 2) /
             (((math.min(w, x + 2) - math.max(0, x - 1))) *
                 ((math.min(h, y + 2) - math.max(0, y - 1))));
         final d = gray[i] - mean3;

@@ -192,7 +192,7 @@ CheckResult overlayCheckResult(
   final summary = found == 0
       ? 'Aucun $what détecté sur les pages analysées.'
       : best >= 0.30
-          ? '$found $what(x) détecté(s), rupture de fond suspecte (${(best * 100).round()} %).'
-          : '$found $what(x) détecté(s), fond continu autour de chacun.';
+      ? '$found $what(x) détecté(s), rupture de fond suspecte (${(best * 100).round()} %).'
+      : '$found $what(x) détecté(s), fond continu autour de chacun.';
   return CheckResult(id: id, score: best, summary: summary, regions: regions);
 }

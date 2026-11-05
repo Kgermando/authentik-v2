@@ -56,10 +56,7 @@ class _PageViewerState extends State<PageViewer>
     final previews = widget.result.previews;
     if (previews.isEmpty) {
       return Center(
-        child: Text(
-          'Aperçu indisponible',
-          style: TextStyle(color: p.muted),
-        ),
+        child: Text('Aperçu indisponible', style: TextStyle(color: p.muted)),
       );
     }
     final page = previews[_page.clamp(0, previews.length - 1).toInt()];
@@ -180,7 +177,8 @@ class _RegionPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final r in regions) {
       final color = palette.checkColor(r.check);
-      final isFocus = focus != null &&
+      final isFocus =
+          focus != null &&
           focus!.check == r.check &&
           focus!.left == r.left &&
           focus!.top == r.top;
@@ -192,10 +190,7 @@ class _RegionPainter extends CustomPainter {
       ).inflate(3);
       final rr = RRect.fromRectAndRadius(rect, const Radius.circular(6));
       final fillA = isFocus ? 0.16 + 0.14 * pulse : 0.12;
-      canvas.drawRRect(
-        rr,
-        Paint()..color = color.withValues(alpha: fillA),
-      );
+      canvas.drawRRect(rr, Paint()..color = color.withValues(alpha: fillA));
       canvas.drawRRect(
         rr,
         Paint()

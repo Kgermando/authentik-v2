@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "Authentik v2" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "authentik_v2" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 ACATech. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 MFP. All rights reserved." "\0"
             VALUE "OriginalFilename", "authentik_v2.exe" "\0"
             VALUE "ProductName", "Authentik v2" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

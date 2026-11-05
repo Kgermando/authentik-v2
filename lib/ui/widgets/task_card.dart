@@ -33,55 +33,52 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _running(Palette p) => Row(
-        children: [
-          ScanRing(progress: task.progress, size: 118),
-          const SizedBox(width: 24),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: Text(
-                    task.stage,
-                    key: ValueKey(task.stage),
-                    style: TextStyle(color: p.accent, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: task.progress),
-                    duration: const Duration(milliseconds: 450),
-                    builder: (_, v, _) => LinearProgressIndicator(
-                      value: v,
-                      minHeight: 7,
-                      backgroundColor: p.line,
-                      color: p.accent,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Analyse locale : rien ne quitte cet ordinateur.',
-                  style: TextStyle(color: p.muted, fontSize: 12.5),
-                ),
-              ],
+    children: [
+      ScanRing(progress: task.progress, size: 118),
+      const SizedBox(width: 24),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              task.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
-          ),
-        ],
-      );
+            const SizedBox(height: 6),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: Text(
+                task.stage,
+                key: ValueKey(task.stage),
+                style: TextStyle(color: p.accent, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: task.progress),
+                duration: const Duration(milliseconds: 450),
+                builder: (_, v, _) => LinearProgressIndicator(
+                  value: v,
+                  minHeight: 7,
+                  backgroundColor: p.line,
+                  color: p.accent,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Analyse locale : rien ne quitte cet ordinateur.',
+              style: TextStyle(color: p.muted, fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 
   Widget _row(BuildContext context, Palette p, AnalysisResult? r, bool failed) {
     final queued = task.status == TaskStatus.queued;
@@ -97,8 +94,8 @@ class TaskCard extends StatelessWidget {
               color: failed
                   ? p.suspect
                   : queued
-                      ? p.muted
-                      : p.verdictColor(r!.verdict),
+                  ? p.muted
+                  : p.verdictColor(r!.verdict),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -110,8 +107,11 @@ class TaskCard extends StatelessWidget {
                 Row(
                   children: [
                     if (task.fromWatcher) ...[
-                      Icon(Icons.folder_special_outlined,
-                          size: 15, color: p.muted),
+                      Icon(
+                        Icons.folder_special_outlined,
+                        size: 15,
+                        color: p.muted,
+                      ),
                       const SizedBox(width: 6),
                     ],
                     Flexible(
@@ -129,8 +129,8 @@ class TaskCard extends StatelessWidget {
                   failed
                       ? (task.error ?? 'Échec')
                       : queued
-                          ? 'En attente'
-                          : '${r!.pageCount} page(s) · ${(r.elapsedMs / 1000).toStringAsFixed(1)} s',
+                      ? 'En attente'
+                      : '${r!.pageCount} page(s) · ${(r.elapsedMs / 1000).toStringAsFixed(1)} s',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

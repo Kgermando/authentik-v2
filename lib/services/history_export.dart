@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import '../core/i18n.dart';
 import '../core/models.dart';
 
 /// Génère un classeur Excel (.xlsx) à partir de l'historique.
@@ -23,6 +24,10 @@ Uint8List buildHistoryXlsx(List<HistoryEntry> entries) {
       'Note',
       'Avertissements',
       'Contrôles (résumé)',
+      tr('export.colonne.acquisition'),
+      tr('export.colonne.dpi'),
+      tr('export.colonne.dpi_estime'),
+      tr('export.colonne.force'),
     ],
     for (final h in entries)
       [
@@ -43,6 +48,12 @@ Uint8List buildHistoryXlsx(List<HistoryEntry> entries) {
             .where((c) => !c.skipped)
             .map((c) => '${c.id.label}: ${(c.score * 100).round()} %')
             .join(' · '),
+        Acquisition.label(h.acquisition),
+        h.firstScale == null ? '' : '${h.firstScale!.dpi.round()}',
+        h.firstScale == null
+            ? ''
+            : (h.firstScale!.estimated ? tr('export.oui') : tr('export.non')),
+        h.forcedByCritical ? tr('export.oui') : tr('export.non'),
       ],
   ];
   return _packXlsx(rows);
@@ -85,15 +96,14 @@ Uint8List _packXlsx(List<List<String>> rows) {
     for (var c = 0; c < line.length; c++) {
       final ref = '${_col(c)}$rowNum';
       final text = _escapeXml(line[c]);
-      sheet.writeln(
-        '<c r="$ref" t="inlineStr"><is><t>$text</t></is></c>',
-      );
+      sheet.writeln('<c r="$ref" t="inlineStr"><is><t>$text</t></is></c>');
     }
     sheet.writeln('</row>');
   }
   sheet.writeln('</sheetData></worksheet>');
 
-  const contentTypes = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const contentTypes =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
@@ -113,17 +123,38 @@ Uint8List _packXlsx(List<List<String>> rows) {
   </sheets>
 </workbook>''';
 
-  const workbookRels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  const workbookRels =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
 </Relationships>''';
 
   final archive = Archive()
-    ..addFile(ArchiveFile('[Content_Types].xml', contentTypes.length, utf8.encode(contentTypes)))
+    ..addFile(
+      ArchiveFile(
+        '[Content_Types].xml',
+        contentTypes.length,
+        utf8.encode(contentTypes),
+      ),
+    )
     ..addFile(ArchiveFile('_rels/.rels', rels.length, utf8.encode(rels)))
-    ..addFile(ArchiveFile('xl/workbook.xml', workbook.length, utf8.encode(workbook)))
-    ..addFile(ArchiveFile('xl/_rels/workbook.xml.rels', workbookRels.length, utf8.encode(workbookRels)))
-    ..addFile(ArchiveFile('xl/worksheets/sheet1.xml', sheet.length, utf8.encode(sheet.toString())));
+    ..addFile(
+      ArchiveFile('xl/workbook.xml', workbook.length, utf8.encode(workbook)),
+    )
+    ..addFile(
+      ArchiveFile(
+        'xl/_rels/workbook.xml.rels',
+        workbookRels.length,
+        utf8.encode(workbookRels),
+      ),
+    )
+    ..addFile(
+      ArchiveFile(
+        'xl/worksheets/sheet1.xml',
+        sheet.length,
+        utf8.encode(sheet.toString()),
+      ),
+    );
 
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.2+4
 
 environment:
   sdk: ^3.12.1
@@ -69,6 +69,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Textes d'interface (nouvelles fonctions) : lib/core/i18n.dart
+  assets:
+    - assets/i18n/fr.json
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
@@ -107,7 +111,7 @@ msix_config:
   display_name: Authentik v2
   publisher_display_name: ACATech
   identity_name: com.acatech.authentik.v2
-  msix_version: 1.0.0.1
+  msix_version: 1.1.2.4
   logo_path: assets\branding\icon_source.png
   trim_logo: false
   capabilities: runFullTrust
@@ -115,8 +119,8 @@ msix_config:
   install_certificate: true
   sign_msix: true
   certificate_path: tool\signing\authentik_codesign.pfx
-  # Mot de passe du PFX généré par tool/signing/create_cert.ps1 (dev). En production : AUTHENTIK_MSIX_CERT_PASSWORD + build_msix.ps1
-  certificate_password: AuthentikDev2026!
+  # Mot de passe du PFX : jamais dans ce fichier. tool/build_msix.ps1 le passe
+  # à msix:create (variable AUTHENTIK_MSIX_CERT_PASSWORD ou tool/signing/.cert_password).
   publisher: CN=Authentik v2, O=ACATech, C=CD
   output_path: build\windows\x64\runner\Release
   output_name: Authentik_v2

@@ -30,11 +30,10 @@ BgrImage _finish(cv.Mat src, int maxSide) {
   final scale = math.min(1.0, maxSide / math.max(srcW, srcH));
   cv.Mat m = src;
   if (scale < 1.0) {
-    m = cv.resize(
-      src,
-      ((srcW * scale).round(), (srcH * scale).round()),
-      interpolation: cv.INTER_AREA,
-    );
+    m = cv.resize(src, (
+      (srcW * scale).round(),
+      (srcH * scale).round(),
+    ), interpolation: cv.INTER_AREA);
   }
   final out = BgrImage(m.cols, m.rows, Uint8List.fromList(m.data), srcW, srcH);
   if (!identical(m, src)) m.dispose();
@@ -46,7 +45,9 @@ BgrImage decodeImage(Uint8List encoded, {int maxSide = kWorkSide}) {
   final m = cv.imdecode(encoded, cv.IMREAD_COLOR);
   if (m.isEmpty) {
     m.dispose();
-    throw const FormatException('Image illisible ou format non pris en charge.');
+    throw const FormatException(
+      'Image illisible ou format non pris en charge.',
+    );
   }
   final out = _finish(m, maxSide);
   m.dispose();
@@ -63,16 +64,27 @@ BgrImage bgraToBgr(Uint8List bgra, int w, int h, {int maxSide = kWorkSide}) {
   return out;
 }
 
+/// Pas de réduction : image à pleine résolution (module référentiels).
+const int kFullSide = 1 << 30;
+
+/// Image de travail obtenue d'une image pleine résolution : même opération
+/// (`INTER_AREA`) que `decodeImage`, donc pixels identiques.
+BgrImage shrink(BgrImage full, {int maxSide = kWorkSide}) {
+  final m = cv.Mat.fromList(full.h, full.w, cv.MatType.CV_8UC3, full.bgr);
+  final out = _finish(m, maxSide);
+  m.dispose();
+  return out;
+}
+
 /// Aperçu JPEG réduit (jamais écrit sur disque).
 Uint8List encodePreview(BgrImage img, {int maxSide = 1600, int quality = 82}) {
   final m = cv.Mat.fromList(img.h, img.w, cv.MatType.CV_8UC3, img.bgr);
   final scale = math.min(1.0, maxSide / math.max(img.w, img.h));
   final r = scale < 1.0
-      ? cv.resize(
-          m,
-          ((img.w * scale).round(), (img.h * scale).round()),
-          interpolation: cv.INTER_AREA,
-        )
+      ? cv.resize(m, (
+          (img.w * scale).round(),
+          (img.h * scale).round(),
+        ), interpolation: cv.INTER_AREA)
       : m;
   final (ok, jpg) = cv.imencode(
     '.jpg',

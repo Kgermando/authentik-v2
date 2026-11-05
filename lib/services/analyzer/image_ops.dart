@@ -94,12 +94,7 @@ class Integral {
     return Integral._(w, h, s);
   }
 
-  factory Integral.maskedFloats(
-    Float32List v,
-    Uint8List mask,
-    int w,
-    int h,
-  ) {
+  factory Integral.maskedFloats(Float32List v, Uint8List mask, int w, int h) {
     final s = Float64List((w + 1) * (h + 1));
     for (var y = 0; y < h; y++) {
       var row = 0.0;
@@ -126,7 +121,10 @@ class Integral {
     y1 = y1.clamp(0, h).toInt();
     if (x1 <= x0 || y1 <= y0) return 0;
     final W = w + 1;
-    return _s[y1 * W + x1] - _s[y0 * W + x1] - _s[y1 * W + x0] + _s[y0 * W + x0];
+    return _s[y1 * W + x1] -
+        _s[y0 * W + x1] -
+        _s[y1 * W + x0] +
+        _s[y0 * W + x0];
   }
 
   double sumRect(IRect r) => sum(r.x, r.y, r.right, r.bottom);
@@ -196,9 +194,7 @@ Uint8List closeMask(Uint8List m, int w, int h, int r) =>
     erode(dilate(m, w, h, r), w, h, r);
 
 class Component {
-  Component(this.id, this.x0, this.y0)
-      : x1 = x0,
-        y1 = y0;
+  Component(this.id, this.x0, this.y0) : x1 = x0, y1 = y0;
 
   final int id;
   int x0;
@@ -388,7 +384,9 @@ GridAnomaly analyzeGrid({
       math.min(imgH - c.y0 * cell, c.h * cell),
     );
     clusters.add(GridCluster(rect, c.area, meanZ));
-    final s = clamp01(0.25 + 0.05 * (c.area - minCells) + 0.05 * (meanZ - zThreshold));
+    final s = clamp01(
+      0.25 + 0.05 * (c.area - minCells) + 0.05 * (meanZ - zThreshold),
+    );
     if (s > best) best = s;
   }
   final frac = outliers / vals.length;

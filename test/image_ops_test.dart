@@ -20,14 +20,7 @@ Uint8List _paper(int w, int h, {int base = 235, int seed = 1}) {
   return out;
 }
 
-void _fillRect(
-  Uint8List bgr,
-  int w,
-  IRect r,
-  int b,
-  int g,
-  int rr,
-) {
+void _fillRect(Uint8List bgr, int w, IRect r, int b, int g, int rr) {
   for (var y = r.y; y < r.bottom; y++) {
     for (var x = r.x; x < r.right; x++) {
       final i = (y * w + x) * 3;

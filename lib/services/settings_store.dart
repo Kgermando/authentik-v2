@@ -26,18 +26,18 @@ class AppSettings {
   bool darkMode;
 
   VerificationProfile get activeProfile => profiles.firstWhere(
-        (e) => e.id == activeProfileId,
-        orElse: () => profiles.first,
-      );
+    (e) => e.id == activeProfileId,
+    orElse: () => profiles.first,
+  );
 
   Map<String, dynamic> toJson() => {
-        'profiles': profiles.map((e) => e.toJson()).toList(),
-        'activeProfileId': activeProfileId,
-        if (dbPath.isNotEmpty) 'dbPath': dbPath,
-        'watchFolder': watchFolder,
-        'watchEnabled': watchEnabled,
-        'darkMode': darkMode,
-      };
+    'profiles': profiles.map((e) => e.toJson()).toList(),
+    'activeProfileId': activeProfileId,
+    if (dbPath.isNotEmpty) 'dbPath': dbPath,
+    'watchFolder': watchFolder,
+    'watchEnabled': watchEnabled,
+    'darkMode': darkMode,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) {
     final profiles = <VerificationProfile>[

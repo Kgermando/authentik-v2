@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
+import '../../core/score_explanation.dart' show inconclusiveExplanation;
 import '../../core/theme.dart';
 import '../../services/app_controller.dart';
 import 'common.dart';
 import 'page_viewer.dart';
+import 'reference_panel.dart';
+import 'score_explanation_view.dart';
 import 'score_gauge.dart';
 
 /// Résultat complet d'une analyse : jauge, contrôles, aperçu annoté,
@@ -65,6 +68,12 @@ class _ResultViewState extends State<ResultView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _summary(context, r),
+            const SizedBox(height: 14),
+            ScoreExplanationView(result: r, sensitivity: _sensitivity(r)),
+            if (r.claimedYear != null) ...[
+              const SizedBox(height: 14),
+              ReferencePanel(result: r),
+            ],
             if (r.warnings.isNotEmpty) ...[
               const SizedBox(height: 14),
               _warnings(context, r),
@@ -93,6 +102,15 @@ class _ResultViewState extends State<ResultView> {
     );
   }
 
+  /// Sensibilité du profil utilisé (retrouvé par son nom), 1 à défaut.
+  double _sensitivity(AnalysisResult r) {
+    final profiles = context.read<AppController>().settings.profiles;
+    for (final p in profiles) {
+      if (p.name == r.profileName) return p.sensitivity;
+    }
+    return 1;
+  }
+
   Widget _summary(BuildContext context, AnalysisResult r) {
     final p = Palette.of(context);
     return Panel(
@@ -114,6 +132,7 @@ class _ResultViewState extends State<ResultView> {
                 'Indices partiels : une vérification manuelle est conseillée.',
               Verdict.authentic =>
                 'Aucune anomalie majeure. Cela ne prouve pas l’authenticité.',
+              Verdict.inconclusive => inconclusiveExplanation(r),
             },
             textAlign: TextAlign.center,
             style: TextStyle(color: p.muted, fontSize: 13),
@@ -136,8 +155,10 @@ class _ResultViewState extends State<ResultView> {
             runSpacing: 8,
             children: [
               Pill('${r.pageCount} page(s)', icon: Icons.description_outlined),
-              Pill('${(r.elapsedMs / 1000).toStringAsFixed(1)} s',
-                  icon: Icons.timer_outlined),
+              Pill(
+                '${(r.elapsedMs / 1000).toStringAsFixed(1)} s',
+                icon: Icons.timer_outlined,
+              ),
               Pill(r.profileName, icon: Icons.tune_rounded),
               Pill(formatDate(r.createdAt), icon: Icons.event_outlined),
               InkWell(
@@ -148,8 +169,10 @@ class _ResultViewState extends State<ResultView> {
                     const SnackBar(content: Text('Empreinte SHA-256 copiée')),
                   );
                 },
-                child: Pill('SHA-256 ${shortHash(r.sha256)}',
-                    icon: Icons.fingerprint_rounded),
+                child: Pill(
+                  'SHA-256 ${shortHash(r.sha256)}',
+                  icon: Icons.fingerprint_rounded,
+                ),
               ),
             ],
           ),
@@ -181,7 +204,10 @@ class _ResultViewState extends State<ResultView> {
           for (final w in r.warnings)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text(w, style: const TextStyle(fontSize: 13, height: 1.35)),
+              child: Text(
+                w,
+                style: const TextStyle(fontSize: 13, height: 1.35),
+              ),
             ),
         ],
       ),
@@ -190,7 +216,8 @@ class _ResultViewState extends State<ResultView> {
 
   Widget _checks(BuildContext context, AnalysisResult r) {
     final p = Palette.of(context);
-    final sorted = [...r.checks]..sort((a, b) {
+    final sorted = [...r.checks]
+      ..sort((a, b) {
         if (a.skipped != b.skipped) return a.skipped ? 1 : -1;
         return b.score.compareTo(a.score);
       });
@@ -210,10 +237,10 @@ class _ResultViewState extends State<ResultView> {
     final color = c.skipped
         ? p.muted
         : c.score >= 0.6
-            ? p.suspect
-            : c.score >= 0.3
-                ? p.review
-                : p.authentic;
+        ? p.suspect
+        : c.score >= 0.3
+        ? p.review
+        : p.authentic;
     final hasRegions = c.regions.isNotEmpty;
     final shown = _visible.contains(c.id);
     return Padding(
@@ -254,7 +281,9 @@ class _ResultViewState extends State<ResultView> {
                 ),
               if (hasRegions)
                 IconButton(
-                  tooltip: shown ? 'Masquer sur l’aperçu' : 'Afficher sur l’aperçu',
+                  tooltip: shown
+                      ? 'Masquer sur l’aperçu'
+                      : 'Afficher sur l’aperçu',
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() {
                     shown ? _visible.remove(c.id) : _visible.add(c.id);
@@ -325,7 +354,10 @@ class _ResultViewState extends State<ResultView> {
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             backgroundColor: selected ? color.withValues(alpha: 0.12) : null,
-            side: BorderSide(color: selected ? color : p.line, width: selected ? 1.6 : 1),
+            side: BorderSide(
+              color: selected ? color : p.line,
+              width: selected ? 1.6 : 1,
+            ),
             foregroundColor: selected ? color : p.ink,
           ),
           onPressed: () async {
@@ -349,11 +381,19 @@ class _ResultViewState extends State<ResultView> {
           const SectionTitle('Vérification manuelle'),
           Row(
             children: [
-              btn('Authentique', Decision.authentic,
-                  Icons.check_circle_outline_rounded, p.authentic),
+              btn(
+                'Authentique',
+                Decision.authentic,
+                Icons.check_circle_outline_rounded,
+                p.authentic,
+              ),
               const SizedBox(width: 10),
-              btn('Falsifié', Decision.fraud, Icons.report_gmailerrorred_rounded,
-                  p.suspect),
+              btn(
+                'Falsifié',
+                Decision.fraud,
+                Icons.report_gmailerrorred_rounded,
+                p.suspect,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -364,11 +404,8 @@ class _ResultViewState extends State<ResultView> {
             decoration: const InputDecoration(
               hintText: 'Note de vérification (facultatif)',
             ),
-            onSubmitted: (_) => ctrl.setDecision(
-              r.id,
-              r.decision,
-              note: _note.text.trim(),
-            ),
+            onSubmitted: (_) =>
+                ctrl.setDecision(r.id, r.decision, note: _note.text.trim()),
           ),
           const SizedBox(height: 12),
           Row(

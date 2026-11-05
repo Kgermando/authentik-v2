@@ -45,7 +45,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     setState(() => _editingId = c.settings.activeProfileId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profils Standard, Certificats et Rapide restaurés.')),
+      const SnackBar(
+        content: Text('Profils Standard, Certificats et Rapide restaurés.'),
+      ),
     );
   }
 
@@ -226,8 +228,9 @@ class _Editor extends StatefulWidget {
 }
 
 class _EditorState extends State<_Editor> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.profile.name);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.profile.name,
+  );
 
   @override
   void dispose() {
@@ -289,25 +292,32 @@ class _EditorState extends State<_Editor> {
               ),
             ),
             for (final id in e.value)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                value: pr.enabled.contains(id),
-                title: Text(
-                  id.label,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+              Material(
+                type: MaterialType.transparency,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: pr.enabled.contains(id),
+                  title: Text(
+                    id.label,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    id.description,
+                    style: TextStyle(
+                      color: p.muted,
+                      fontSize: 12.5,
+                      height: 1.3,
+                    ),
+                  ),
+                  onChanged: (v) => _touch(() {
+                    if (v) {
+                      pr.enabled.add(id);
+                    } else if (pr.enabled.length > 1) {
+                      pr.enabled.remove(id);
+                    }
+                  }),
                 ),
-                subtitle: Text(
-                  id.description,
-                  style: TextStyle(color: p.muted, fontSize: 12.5, height: 1.3),
-                ),
-                onChanged: (v) => _touch(() {
-                  if (v) {
-                    pr.enabled.add(id);
-                  } else if (pr.enabled.length > 1) {
-                    pr.enabled.remove(id);
-                  }
-                }),
               ),
           ],
           const SizedBox(height: 24),
@@ -327,7 +337,8 @@ class _EditorState extends State<_Editor> {
           _slider(
             context,
             label: 'Sensibilité des contrôles',
-            help: 'Plus élevée : détecte davantage, avec plus de faux positifs.',
+            help:
+                'Plus élevée : détecte davantage, avec plus de faux positifs.',
             value: pr.sensitivity,
             min: 0.6,
             max: 1.4,
@@ -342,13 +353,23 @@ class _EditorState extends State<_Editor> {
               Expanded(
                 child: DropdownButtonFormField<int>(
                   initialValue: pr.renderDpi,
-                  decoration:
-                      const InputDecoration(labelText: 'Résolution de rendu des PDF'),
+                  decoration: const InputDecoration(
+                    labelText: 'Résolution de rendu des PDF',
+                  ),
                   items: const [
-                    DropdownMenuItem(value: 150, child: Text('150 DPI (rapide)')),
+                    DropdownMenuItem(
+                      value: 150,
+                      child: Text('150 DPI (rapide)'),
+                    ),
                     DropdownMenuItem(value: 200, child: Text('200 DPI')),
-                    DropdownMenuItem(value: 300, child: Text('300 DPI (recommandé)')),
-                    DropdownMenuItem(value: 400, child: Text('400 DPI (précis, lent)')),
+                    DropdownMenuItem(
+                      value: 300,
+                      child: Text('300 DPI (recommandé)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 400,
+                      child: Text('400 DPI (précis, lent)'),
+                    ),
                   ],
                   onChanged: (v) => _touch(() => pr.renderDpi = v ?? 300),
                 ),
@@ -357,8 +378,9 @@ class _EditorState extends State<_Editor> {
               Expanded(
                 child: DropdownButtonFormField<int>(
                   initialValue: pr.maxPages,
-                  decoration:
-                      const InputDecoration(labelText: 'Pages analysées par PDF'),
+                  decoration: const InputDecoration(
+                    labelText: 'Pages analysées par PDF',
+                  ),
                   items: [
                     for (var i = 1; i <= 6; i++)
                       DropdownMenuItem(value: i, child: Text('$i page(s)')),
@@ -374,8 +396,15 @@ class _EditorState extends State<_Editor> {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: widget.onDelete,
-                icon: Icon(Icons.delete_outline_rounded, color: p.suspect, size: 18),
-                label: Text('Supprimer ce profil', style: TextStyle(color: p.suspect)),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: p.suspect,
+                  size: 18,
+                ),
+                label: Text(
+                  'Supprimer ce profil',
+                  style: TextStyle(color: p.suspect),
+                ),
               ),
             ),
           ],
@@ -404,8 +433,10 @@ class _EditorState extends State<_Editor> {
           Row(
             children: [
               Expanded(
-                child: Text(label,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               Text(
                 format(value),

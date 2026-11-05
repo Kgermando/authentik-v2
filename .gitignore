@@ -27,3 +27,16 @@ tool/signing/.cert_password
 tool/signing/authentik_codesign.cer
 tool/dist/Authentik_v2.msix
 tool/dist/Authentik_v2_Publisher.cer
+tool/dist/
+tool/authentik-*/
+tool/authentik-*.zip
+# Réglages locaux de l'assistant de code
+.claude/settings.local.json
+# Données : documents réels du client, bases SQLite, sauvegardes, référentiels
+testdata_prive/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.bak
+*.akref

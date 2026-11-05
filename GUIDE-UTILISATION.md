@@ -226,4 +226,4 @@ L’historique est celui de **cet ordinateur**. Exportez Excel si vous devez tra
 
 ---
 
-*Authentik v2 · ACATech · Guide de prise en main*
+*Authentik v2 · MFP · Guide de prise en main*

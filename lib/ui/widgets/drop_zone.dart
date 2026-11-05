@@ -34,7 +34,10 @@ class _DropZoneState extends State<DropZone> {
       allowedExtensions: supportedExtensions.toList(),
     );
     if (picked.isEmpty) return;
-    final paths = [for (final f in picked) if (f.path != null) f.path!];
+    final paths = [
+      for (final f in picked)
+        if (f.path != null) f.path!,
+    ];
     if (paths.isNotEmpty) widget.onFiles(paths);
   }
 
@@ -72,8 +75,22 @@ class _DropZoneState extends State<DropZone> {
                 radius: 22,
                 width: active ? 2.2 : 1.5,
               ),
-              child: Center(
-                child: widget.compact ? _compact(p) : _full(p, active),
+              // Pendant l'animation de hauteur (compact ↔ complet), le
+              // contenu est réduit au lieu de déborder.
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: widget.compact ? _compact(p) : _full(p, active),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -83,68 +100,72 @@ class _DropZoneState extends State<DropZone> {
   }
 
   Widget _full(Palette p, bool active) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedScale(
-            scale: active ? 1.12 : 1,
-            duration: const Duration(milliseconds: 220),
-            child: Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: p.accent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.upload_file_rounded, size: 32, color: p.accent),
-            ),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AnimatedScale(
+        scale: active ? 1.12 : 1,
+        duration: const Duration(milliseconds: 220),
+        child: Container(
+          width: 68,
+          height: 68,
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 16),
-          Text(
-            _over ? 'Relâchez pour analyser' : 'Déposez un certificat ici',
-            style: TextStyle(
-              fontFamilyFallback: kSerif,
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: p.ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'PDF, PNG, JPG, TIFF, BMP ou WEBP · ou cliquez pour parcourir',
-            style: TextStyle(color: p.muted, fontSize: 13.5),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Le document n’est jamais enregistré, seul le résultat est conservé.',
-            style: TextStyle(color: p.muted, fontSize: 12),
-          ),
-        ],
-      );
+          child: Icon(Icons.upload_file_rounded, size: 32, color: p.accent),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Text(
+        _over ? 'Relâchez pour analyser' : 'Déposez un certificat ici',
+        style: TextStyle(
+          fontFamilyFallback: kSerif,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          color: p.ink,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'PDF, PNG, JPG, TIFF, BMP ou WEBP · ou cliquez pour parcourir',
+        style: TextStyle(color: p.muted, fontSize: 13.5),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Le document n’est jamais enregistré, seul le résultat est conservé.',
+        style: TextStyle(color: p.muted, fontSize: 12),
+      ),
+    ],
+  );
 
   Widget _compact(Palette p) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.upload_file_rounded, color: p.accent),
-          const SizedBox(width: 12),
-          Text(
-            _over ? 'Relâchez pour analyser' : 'Analyser un autre document',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: p.ink,
-              fontSize: 15,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'glisser-déposer ou cliquer',
-            style: TextStyle(color: p.muted, fontSize: 13),
-          ),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(Icons.upload_file_rounded, color: p.accent),
+      const SizedBox(width: 12),
+      Text(
+        _over ? 'Relâchez pour analyser' : 'Analyser un autre document',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: p.ink,
+          fontSize: 15,
+        ),
+      ),
+      const SizedBox(width: 10),
+      Text(
+        'glisser-déposer ou cliquer',
+        style: TextStyle(color: p.muted, fontSize: 13),
+      ),
+    ],
+  );
 }
 
 class _DashedBorder extends CustomPainter {
-  _DashedBorder({required this.color, required this.radius, required this.width});
+  _DashedBorder({
+    required this.color,
+    required this.radius,
+    required this.width,
+  });
 
   final Color color;
   final double radius;

@@ -26,6 +26,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
+    // Recherche courante (effacée par un lien depuis les statistiques).
+    _search.text = context.read<AppController>().historySearch;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<AppController>().refreshHistory();
     });
@@ -42,14 +44,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (entries.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune ligne à exporter pour les filtres actuels.')),
+        const SnackBar(
+          content: Text('Aucune ligne à exporter pour les filtres actuels.'),
+        ),
       );
       return;
     }
     setState(() => _exporting = true);
     try {
       final bytes = buildHistoryXlsx(entries);
-      final stamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .split('.')
+          .first;
       final saved = await FilePicker.saveFile(
         dialogTitle: 'Exporter l’historique en Excel',
         fileName: 'authentik-historique-$stamp.xlsx',
@@ -60,14 +68,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (!mounted) return;
       if (saved != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export enregistré (${entries.length} ligne(s)).')),
+          SnackBar(
+            content: Text('Export enregistré (${entries.length} ligne(s)).'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export impossible : $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export impossible : $e')));
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -111,25 +121,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
         if (offline) _DbBanner(c: c),
-        Row(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _search,
-                decoration: InputDecoration(
-                  hintText: 'Rechercher un nom de fichier ou une empreinte',
-                  prefixIcon: Icon(Icons.search_rounded, color: p.muted),
-                ),
-                onSubmitted: (v) => c.setHistoryQuery(search: v),
+            TextField(
+              controller: _search,
+              decoration: InputDecoration(
+                hintText: 'Rechercher un nom de fichier ou une empreinte',
+                prefixIcon: Icon(Icons.search_rounded, color: p.muted),
               ),
+              onSubmitted: (v) => c.setHistoryQuery(search: v),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 FilterChip(
                   label: const Text('Tous'),
-                  selected: c.historyFilter == null,
+                  selected: c.historyFilter == null && !c.historyPendingOnly,
                   onSelected: (_) => c.setHistoryQuery(clearFilter: true),
                 ),
                 for (final v in Verdict.values)
@@ -138,6 +148,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     selected: c.historyFilter == v,
                     onSelected: (_) => c.setHistoryQuery(filter: v),
                   ),
+                FilterChip(
+                  avatar: const Icon(Icons.hourglass_empty_rounded, size: 16),
+                  label: const Text('En attente de décision'),
+                  selected: c.historyPendingOnly,
+                  onSelected: (on) =>
+                      c.setHistoryQuery(pendingOnly: on, clearFilter: !on),
+                ),
               ],
             ),
           ],
@@ -149,10 +166,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Center(
               child: Column(
                 children: [
-                  Icon(Icons.history_toggle_off_rounded, size: 40, color: p.muted),
+                  Icon(
+                    Icons.history_toggle_off_rounded,
+                    size: 40,
+                    color: p.muted,
+                  ),
                   const SizedBox(height: 12),
-                  Text('Aucune analyse pour le moment',
-                      style: TextStyle(color: p.muted)),
+                  Text(
+                    'Aucune analyse pour le moment',
+                    style: TextStyle(color: p.muted),
+                  ),
                 ],
               ),
             ),
@@ -164,7 +187,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: _Row(
                 entry: h,
                 open: _open == h.id,
-                onToggle: () => setState(() => _open = _open == h.id ? null : h.id),
+                onToggle: () =>
+                    setState(() => _open = _open == h.id ? null : h.id),
                 onOpenResult: () {
                   final r = c.sessionResults
                       .where((e) => e.id == h.id)
@@ -178,7 +202,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ],
     );
   }
-
 }
 
 class _DbBanner extends StatelessWidget {
@@ -284,7 +307,9 @@ class _Row extends StatelessWidget {
                   if (h.decision != Decision.none) ...[
                     Pill(
                       h.decision.label,
-                      color: h.decision == Decision.fraud ? p.suspect : p.authentic,
+                      color: h.decision == Decision.fraud
+                          ? p.suspect
+                          : p.authentic,
                       icon: h.decision == Decision.fraud
                           ? Icons.report_gmailerrorred_rounded
                           : Icons.check_circle_outline_rounded,
@@ -303,7 +328,9 @@ class _Row extends StatelessWidget {
                   const SizedBox(width: 12),
                   VerdictChip(h.verdict),
                   Icon(
-                    open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    open
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     color: p.muted,
                   ),
                 ],
@@ -328,8 +355,10 @@ class _Row extends StatelessWidget {
                       Pill('${h.pageCount} page(s)'),
                       Pill('seuil ${(h.threshold * 100).round()} %'),
                       Pill('${(h.elapsedMs / 1000).toStringAsFixed(1)} s'),
-                      Pill('SHA-256 ${shortHash(h.sha256)}',
-                          icon: Icons.fingerprint_rounded),
+                      Pill(
+                        'SHA-256 ${shortHash(h.sha256)}',
+                        icon: Icons.fingerprint_rounded,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -342,7 +371,9 @@ class _Row extends StatelessWidget {
                             width: 44,
                             child: Text(
                               '${(ch.score * 100).round()} %',
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                           Expanded(
@@ -357,12 +388,17 @@ class _Row extends StatelessWidget {
                   for (final w in h.warnings)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Text('⚠ $w',
-                          style: TextStyle(color: p.review, fontSize: 12.5)),
+                      child: Text(
+                        '⚠ $w',
+                        style: TextStyle(color: p.review, fontSize: 12.5),
+                      ),
                     ),
                   if (h.note.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text('Note : ${h.note}', style: const TextStyle(fontSize: 13)),
+                    Text(
+                      'Note : ${h.note}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
                   ],
                   const SizedBox(height: 12),
                   Row(
@@ -376,9 +412,15 @@ class _Row extends StatelessWidget {
                       const Spacer(),
                       TextButton.icon(
                         onPressed: () => _confirmDelete(context, c),
-                        icon: Icon(Icons.delete_outline_rounded,
-                            size: 18, color: p.suspect),
-                        label: Text('Supprimer', style: TextStyle(color: p.suspect)),
+                        icon: Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                          color: p.suspect,
+                        ),
+                        label: Text(
+                          'Supprimer',
+                          style: TextStyle(color: p.suspect),
+                        ),
                       ),
                     ],
                   ),

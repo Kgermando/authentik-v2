@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 
 /// Palette d'Authentik : papier chaud, encre bleu nuit, vert-de-gris pour
-/// l'accent, et trois couleurs de verdict (vert, ambre, vermillon de sceau).
+/// l'accent, et quatre couleurs de verdict (vert, ambre, vermillon de sceau,
+/// ardoise pour « non concluant »).
 class Palette {
   const Palette._({
     required this.bg,
@@ -17,6 +18,7 @@ class Palette {
     required this.authentic,
     required this.review,
     required this.suspect,
+    required this.inconclusive,
     required this.dark,
   });
 
@@ -31,6 +33,7 @@ class Palette {
   final Color authentic;
   final Color review;
   final Color suspect;
+  final Color inconclusive;
   final bool dark;
 
   static const light = Palette._(
@@ -45,6 +48,7 @@ class Palette {
     authentic: Color(0xFF2E7D5A),
     review: Color(0xFFC08410),
     suspect: Color(0xFFB3361F),
+    inconclusive: Color(0xFF55617A),
     dark: false,
   );
 
@@ -60,6 +64,7 @@ class Palette {
     authentic: Color(0xFF4CB98A),
     review: Color(0xFFE0A93B),
     suspect: Color(0xFFE5705A),
+    inconclusive: Color(0xFF9AA7C2),
     dark: true,
   );
 
@@ -67,37 +72,52 @@ class Palette {
       Theme.of(context).brightness == Brightness.dark ? darkTheme : light;
 
   Color verdictColor(Verdict v) => switch (v) {
-        Verdict.authentic => authentic,
-        Verdict.review => review,
-        Verdict.suspect => suspect,
-      };
+    Verdict.authentic => authentic,
+    Verdict.review => review,
+    Verdict.suspect => suspect,
+    Verdict.inconclusive => inconclusive,
+  };
 
   Color checkColor(CheckId id) => switch (id) {
-        CheckId.sealOverlay => suspect,
-        CheckId.signatureOverlay => const Color(0xFF7A4FD1),
-        CheckId.textConsistency => review,
-        CheckId.copyMove => const Color(0xFFD1478F),
-        CheckId.noiseConsistency => accent,
-        CheckId.ela => const Color(0xFF3C7DD9),
-        CheckId.metadata => muted,
-      };
+    CheckId.sealOverlay => suspect,
+    CheckId.signatureOverlay => const Color(0xFF7A4FD1),
+    CheckId.textConsistency => review,
+    CheckId.copyMove => const Color(0xFFD1478F),
+    CheckId.noiseConsistency => accent,
+    CheckId.ela => const Color(0xFF3C7DD9),
+    CheckId.metadata => muted,
+    CheckId.sealComparison => const Color(0xFF2F5BB7),
+    CheckId.sealCopy => const Color(0xFF9B2C6B),
+    CheckId.originalModified => const Color(0xFFB4532A),
+    CheckId.signatureComparison => const Color(0xFF2E7D6B),
+    CheckId.signatureCopy => const Color(0xFF6A3FA0),
+    CheckId.layoutComparison => const Color(0xFF5D6B2E),
+    CheckId.sealSignaturePosition => const Color(0xFF2B7A99),
+    CheckId.textYear => const Color(0xFF8A5A00),
+    CheckId.paperComparison => const Color(0xFF9C7A3C),
+    CheckId.yearConsistency => const Color(0xFFB0303A),
+  };
 }
 
 const kSerif = <String>['Georgia', 'Cambria', 'Times New Roman', 'serif'];
-const kSans = <String>['Segoe UI', 'Inter', 'Roboto', 'Helvetica Neue', 'Arial'];
+const kSans = <String>[
+  'Segoe UI',
+  'Inter',
+  'Roboto',
+  'Helvetica Neue',
+  'Arial',
+];
 
 ThemeData buildTheme(Brightness b) {
   final p = b == Brightness.dark ? Palette.darkTheme : Palette.light;
-  final scheme = ColorScheme.fromSeed(
-    seedColor: p.accent,
-    brightness: b,
-  ).copyWith(
-    primary: p.accent,
-    surface: p.surface,
-    onSurface: p.ink,
-    outline: p.line,
-    error: p.suspect,
-  );
+  final scheme = ColorScheme.fromSeed(seedColor: p.accent, brightness: b)
+      .copyWith(
+        primary: p.accent,
+        surface: p.surface,
+        onSurface: p.ink,
+        outline: p.line,
+        error: p.suspect,
+      );
   final base = ThemeData(
     useMaterial3: true,
     brightness: b,

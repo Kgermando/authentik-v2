@@ -3,10 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/i18n.dart';
 import '../core/models.dart';
 import 'analyzer/analyzer.dart';
 import 'database.dart';
 import 'document_loader.dart';
+import 'reference/reference_context.dart';
+import 'reference/reference_service.dart';
+import 'reference/text_check_runner.dart';
 import 'settings_store.dart';
 
 enum TaskStatus { queued, running, done, failed }
@@ -17,12 +21,16 @@ class AnalysisTask {
     required this.path,
     required this.name,
     this.fromWatcher = false,
+    this.claimedYear,
   }) : added = DateTime.now();
 
   final String id;
   final String path;
   final String name;
   final bool fromWatcher;
+
+  /// Année d'émission choisie (null : sans référentiel).
+  final int? claimedYear;
   final DateTime added;
   TaskStatus status = TaskStatus.queued;
   double progress = 0;
@@ -37,8 +45,8 @@ enum DbState { disconnected, connecting, connected, failed }
 /// base de données et dossier surveillé.
 class AppController extends ChangeNotifier {
   AppController({SettingsStore? store, AuthentikDb? db})
-      : _store = store ?? SettingsStore(),
-        db = db ?? AuthentikDb();
+    : _store = store ?? SettingsStore(),
+      db = db ?? AuthentikDb();
 
   final SettingsStore _store;
   final AuthentikDb db;
@@ -48,10 +56,17 @@ class AppController extends ChangeNotifier {
 
   DbState dbState = DbState.disconnected;
   String? dbError;
+
+  /// Information à afficher après ouverture (copie de sauvegarde avant mise
+  /// à niveau du schéma).
+  String? dbNotice;
   DbStats? stats;
   List<HistoryEntry> history = [];
   String historySearch = '';
   Verdict? historyFilter;
+
+  /// Seulement les documents non authentiques sans décision humaine.
+  bool historyPendingOnly = false;
 
   /// Résultats de la session, utilisés si la base est indisponible.
   final List<AnalysisResult> sessionResults = [];
@@ -63,10 +78,19 @@ class AppController extends ChangeNotifier {
   final Map<String, String> _seen = {};
   String? watchError;
 
+  /// Année d'émission déclarée pour les prochaines analyses manuelles (null :
+  /// aucune). Le dossier surveillé analyse toujours sans année.
+  int? claimedYear;
+
+  void setClaimedYear(int? y) {
+    claimedYear = y;
+    notifyListeners();
+  }
+
   VerificationProfile get profile => settings.activeProfile;
   bool get busy => tasks.any(
-        (t) => t.status == TaskStatus.running || t.status == TaskStatus.queued,
-      );
+    (t) => t.status == TaskStatus.running || t.status == TaskStatus.queued,
+  );
 
   Future<void> init() async {
     settings = await _store.load();
@@ -85,14 +109,16 @@ class AppController extends ChangeNotifier {
     dbError = null;
     notifyListeners();
     try {
-      await db.connect(
-        path: settings.dbPath.isEmpty ? null : settings.dbPath,
-      );
+      await db.connect(path: settings.dbPath.isEmpty ? null : settings.dbPath);
       dbState = DbState.connected;
+      final backup = db.lastBackupPath;
+      dbNotice = backup == null
+          ? null
+          : tr('base.sauvegarde', {'chemin': backup});
       await refreshHistory();
     } catch (e) {
       dbState = DbState.failed;
-      dbError = _short(e);
+      dbError = _short(describeDbError(e));
     }
     notifyListeners();
   }
@@ -105,7 +131,11 @@ class AppController extends ChangeNotifier {
       return;
     }
     try {
-      history = await db.list(verdict: historyFilter, search: historySearch);
+      history = await db.list(
+        verdict: historyFilter,
+        search: historySearch,
+        pendingOnly: historyPendingOnly,
+      );
       stats = await db.stats();
     } catch (e) {
       dbState = DbState.failed;
@@ -114,18 +144,39 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setHistoryQuery({String? search, Verdict? filter, bool clearFilter = false}) {
+  /// [filter] et [pendingOnly] s'excluent : choisir l'un retire l'autre.
+  void setHistoryQuery({
+    String? search,
+    Verdict? filter,
+    bool clearFilter = false,
+    bool? pendingOnly,
+  }) {
     if (search != null) historySearch = search;
-    if (filter != null) historyFilter = filter;
-    if (clearFilter) historyFilter = null;
+    if (filter != null) {
+      historyFilter = filter;
+      historyPendingOnly = false;
+    }
+    if (pendingOnly != null) {
+      historyPendingOnly = pendingOnly;
+      if (pendingOnly) historyFilter = null;
+    }
+    if (clearFilter) {
+      historyFilter = null;
+      historyPendingOnly = false;
+    }
     unawaited(refreshHistory());
   }
 
-  Future<void> setDecision(
-    String id,
-    Decision d, {
-    String note = '',
-  }) async {
+  /// Prépare l'historique pour un lien depuis les statistiques : recherche
+  /// effacée et un seul filtre, pour que la liste corresponde au compteur.
+  void showHistory({Verdict? filter, bool pendingOnly = false}) {
+    historySearch = '';
+    historyFilter = pendingOnly ? null : filter;
+    historyPendingOnly = pendingOnly;
+    unawaited(refreshHistory());
+  }
+
+  Future<void> setDecision(String id, Decision d, {String note = ''}) async {
     for (final r in sessionResults) {
       if (r.id == id) {
         r.decision = d;
@@ -180,8 +231,9 @@ class AppController extends ChangeNotifier {
 
   /// Remet Standard, Certificats et Rapide à leurs réglages d'origine.
   Future<void> restoreDefaultProfiles() async {
-    settings.profiles =
-        VerificationProfile.withRestoredDefaults(settings.profiles);
+    settings.profiles = VerificationProfile.withRestoredDefaults(
+      settings.profiles,
+    );
     if (!settings.profiles.any((p) => p.id == settings.activeProfileId)) {
       settings.activeProfileId = 'certificats';
     }
@@ -202,6 +254,7 @@ class AppController extends ChangeNotifier {
         path: path,
         name: path.split(RegExp(r'[\\/]')).last,
         fromWatcher: fromWatcher,
+        claimedYear: fromWatcher ? null : claimedYear,
       );
       if (!isSupportedFile(path)) {
         t.status = TaskStatus.failed;
@@ -219,9 +272,10 @@ class AppController extends ChangeNotifier {
     _running = true;
     try {
       while (true) {
-        final next = tasks.reversed
-            .cast<AnalysisTask?>()
-            .firstWhere((t) => t!.status == TaskStatus.queued, orElse: () => null);
+        final next = tasks.reversed.cast<AnalysisTask?>().firstWhere(
+          (t) => t!.status == TaskStatus.queued,
+          orElse: () => null,
+        );
         if (next == null) break;
         await _runTask(next);
       }
@@ -236,12 +290,65 @@ class AppController extends ChangeNotifier {
     t.progress = 0.01;
     notifyListeners();
     try {
-      final job = await prepareJob(t.path, profile);
-      final result = await runAnalysis(job, (f, s) {
+      final prof = profile;
+      var job = await prepareJob(
+        t.path,
+        prof,
+        acquisition: t.fromWatcher
+            ? Acquisition.dossierSurveille
+            : Acquisition.fichier,
+      );
+      // Fichier identique à un original du référentiel : sans année choisie,
+      // l'année de cet original est prise automatiquement.
+      final known = await _identicalOriginal(job.sha256);
+      var year = t.claimedYear;
+      final notes = <String>[];
+      KnownOriginal? identical;
+      if (known != null) {
+        if (year == null) {
+          year = known.year;
+          notes.add(
+            tr('ref.annee_auto', {
+              'annee': known.year,
+              'original': known.label,
+            }),
+          );
+        }
+        if (year == known.year) {
+          identical = known;
+        } else {
+          notes.add(
+            tr('ref.original_autre_annee', {
+              'original': known.label,
+              'annee_original': known.year,
+              'annee': year,
+            }),
+          );
+        }
+      }
+      // Référentiel de l'année, chargé une seule fois avant l'analyse.
+      ReferenceContext? reference;
+      if (year != null) {
+        if (dbState != DbState.connected) {
+          throw StateError(tr('ref.ui.base_requise'));
+        }
+        t.stage = tr('ref.ui.chargement', {'annee': year});
+        notifyListeners();
+        reference = await ReferenceService(db).loadContext(claimedYear: year);
+        job = job.withReference(reference, identicalOriginal: identical);
+      }
+      job.warnings.insertAll(0, notes);
+      var result = await runAnalysis(job, (f, s) {
         t.progress = f;
         t.stage = s;
         notifyListeners();
       });
+      // Année écrite dans la date et le numéro (Tesseract, facultatif).
+      if (year != null) {
+        t.stage = tr('ref.ui.lecture_texte');
+        notifyListeners();
+        result = await applyTextYearCheck(result, prof, ctx: reference);
+      }
       t.result = result;
       t.status = TaskStatus.done;
       t.progress = 1;
@@ -261,6 +368,21 @@ class AppController extends ChangeNotifier {
       t.error = _short(e);
     }
     notifyListeners();
+  }
+
+  /// Original authentique actif (année active) dont le fichier a la même
+  /// empreinte SHA-256 ; null s'il n'y en a pas ou sans base.
+  Future<KnownOriginal?> _identicalOriginal(String sha) async {
+    if (dbState != DbState.connected) return null;
+    try {
+      final s = await db.references.specimenBySha(sha);
+      if (s == null || !s.active || !s.authentic) return null;
+      final y = await db.references.yearById(s.yearId);
+      if (y == null || y.status != RefStatus.actif) return null;
+      return KnownOriginal(specimenId: s.id, label: s.label, year: y.year);
+    } catch (_) {
+      return null;
+    }
   }
 
   void clearFinishedTasks() {
@@ -286,8 +408,13 @@ class AppController extends ChangeNotifier {
     return [
       for (final h in history)
         if ((historyFilter == null || h.verdict == historyFilter) &&
+            (!historyPendingOnly ||
+                (h.verdict != Verdict.authentic &&
+                    h.decision == Decision.none)) &&
             (historySearch.isEmpty ||
-                h.fileName.toLowerCase().contains(historySearch.toLowerCase()) ||
+                h.fileName.toLowerCase().contains(
+                  historySearch.toLowerCase(),
+                ) ||
                 h.sha256.toLowerCase().contains(historySearch.toLowerCase())))
           h,
     ];
@@ -313,10 +440,13 @@ class AppController extends ChangeNotifier {
     try {
       _watchSub = dir
           .watch(events: FileSystemEvent.create | FileSystemEvent.modify)
-          .listen(_onFsEvent, onError: (Object e) {
-        watchError = _short(e);
-        notifyListeners();
-      });
+          .listen(
+            _onFsEvent,
+            onError: (Object e) {
+              watchError = _short(e);
+              notifyListeners();
+            },
+          );
     } catch (e) {
       watchError = _short(e);
     }
@@ -357,7 +487,10 @@ class AppController extends ChangeNotifier {
   }
 
   String _short(Object e) {
-    final s = e.toString().replaceFirst(RegExp(r'^(Exception|StateError): '), '');
+    final s = e.toString().replaceFirst(
+      RegExp(r'^(Exception|StateError): '),
+      '',
+    );
     return s.length > 300 ? '${s.substring(0, 300)}…' : s;
   }
 }

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/identity.dart';
 import '../core/theme.dart';
 import '../services/app_controller.dart';
 import 'screens/analyze_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profiles_screen.dart';
+import 'screens/references_screen.dart';
 import 'screens/settings_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -19,23 +21,37 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   static const _items = <(IconData, IconData, String)>[
-    (Icons.document_scanner_outlined, Icons.document_scanner_rounded, 'Analyse'),
+    (
+      Icons.document_scanner_outlined,
+      Icons.document_scanner_rounded,
+      'Analyse',
+    ),
     (Icons.history_rounded, Icons.history_rounded, 'Historique'),
+    (
+      Icons.collections_bookmark_outlined,
+      Icons.collections_bookmark,
+      'Référentiels',
+    ),
     (Icons.tune_rounded, Icons.tune_rounded, 'Profils'),
     (Icons.settings_outlined, Icons.settings_rounded, 'Paramètres'),
   ];
 
   Widget _page() => switch (_index) {
-        0 => AnalyzeScreen(onGoToProfiles: () => setState(() => _index = 2)),
-        1 => HistoryScreen(
-            onOpenResult: (r) {
-              context.read<AppController>().select(r);
-              setState(() => _index = 0);
-            },
-          ),
-        2 => const ProfilesScreen(),
-        _ => const SettingsScreen(),
-      };
+    0 => AnalyzeScreen(
+      onGoToProfiles: () => setState(() => _index = 3),
+      onGoToReferences: () => setState(() => _index = 2),
+      onGoToHistory: () => setState(() => _index = 1),
+    ),
+    1 => HistoryScreen(
+      onOpenResult: (r) {
+        context.read<AppController>().select(r);
+        setState(() => _index = 0);
+      },
+    ),
+    2 => const ReferencesScreen(),
+    3 => const ProfilesScreen(),
+    _ => const SettingsScreen(),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +152,7 @@ class _Brand extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Authentik',
+              ProductIdentity.shortName,
               style: TextStyle(
                 fontFamilyFallback: kSerif,
                 fontSize: 21,
@@ -212,7 +228,10 @@ class _Sidebar extends StatelessWidget {
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(color: dbColor, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: dbColor,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 9),
                   Expanded(
@@ -276,7 +295,10 @@ class _NavItem extends StatelessWidget {
               SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2, color: p.accent),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: p.accent,
+                ),
               ),
           ],
         ),

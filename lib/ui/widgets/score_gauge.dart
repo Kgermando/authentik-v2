@@ -134,10 +134,14 @@ class _GaugePainter extends CustomPainter {
     final a = _start + _sweep * threshold.clamp(0.0, 1.0);
     final c = rect.center;
     final r = rect.width / 2;
-    final p1 = Offset(c.dx + (r - stroke * 0.85) * math.cos(a),
-        c.dy + (r - stroke * 0.85) * math.sin(a));
-    final p2 = Offset(c.dx + (r + stroke * 0.85) * math.cos(a),
-        c.dy + (r + stroke * 0.85) * math.sin(a));
+    final p1 = Offset(
+      c.dx + (r - stroke * 0.85) * math.cos(a),
+      c.dy + (r - stroke * 0.85) * math.sin(a),
+    );
+    final p2 = Offset(
+      c.dx + (r + stroke * 0.85) * math.cos(a),
+      c.dy + (r + stroke * 0.85) * math.sin(a),
+    );
     canvas.drawLine(
       p1,
       p2,

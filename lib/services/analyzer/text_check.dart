@@ -13,10 +13,7 @@ class _Glyph {
 }
 
 class _Line {
-  _Line(_Glyph g)
-      : glyphs = [g],
-        cySum = g.cy,
-        hSum = g.comp.h.toDouble();
+  _Line(_Glyph g) : glyphs = [g], cySum = g.cy, hSum = g.comp.h.toDouble();
 
   final List<_Glyph> glyphs;
   double cySum;
@@ -42,8 +39,63 @@ class _Word {
   double darkness = 0;
   double stroke = 0;
   double sharp = 0;
+
+  /// Saturation moyenne de l'encre (0..255) : stylo de couleur ≫ impression.
+  double sat = 0;
   int ink = 0;
   double z = 0;
+}
+
+/// Réglages de la comparaison d'encre (version 2).
+abstract final class TextCheckParams {
+  /// Version du contrôle : gras, filigrane, stylo de couleur et images
+  /// comparés à part.
+  static const String version = '2.0.0';
+
+  /// Encre de couleur (stylo bleu, tampon) : saturation moyenne au-delà.
+  static const double coloredInkSat = 60;
+
+  /// Élément graphique (armoiries, logo) : « mot » plus haut que ce
+  /// multiple de la hauteur médiane des mots de la page.
+  static const double maxWordHeightRatio = 2.5;
+
+  /// Un groupe n'est séparé en deux familles (normal / gras, encre / filigrane)
+  /// que si chacune compte au moins ce nombre de mots : un mot retouché isolé
+  /// ne peut pas former sa propre famille.
+  static const int minFamily = 6;
+
+  /// Écart vide entre les deux familles, en écarts-types robustes internes.
+  static const double familyGap = 1.5;
+}
+
+/// Sépare [list] en deux familles si la mesure [f] est nettement bimodale
+/// (un écart vide entre deux groupes d'au moins [TextCheckParams.minFamily]
+/// mots) ; sinon renvoie la liste seule.
+List<List<_Word>> _splitFamilies(
+  List<_Word> list,
+  double Function(_Word) f,
+  double minSpread,
+) {
+  const minN = TextCheckParams.minFamily;
+  if (list.length < 2 * minN) return [list];
+  final sorted = [...list]..sort((a, b) => f(a).compareTo(f(b)));
+  var best = -1.0;
+  var cut = -1;
+  for (var i = minN; i <= sorted.length - minN; i++) {
+    final lo = [for (final w in sorted.sublist(0, i)) f(w)];
+    final hi = [for (final w in sorted.sublist(i)) f(w)];
+    final gap = hi.first - lo.last;
+    if (gap <= 0) continue;
+    final sLo = 1.4826 * math.max(mad(lo, median(lo)), minSpread);
+    final sHi = 1.4826 * math.max(mad(hi, median(hi)), minSpread);
+    final ratio = gap / math.max(sLo, sHi);
+    if (ratio > best) {
+      best = ratio;
+      cut = i;
+    }
+  }
+  if (cut < 0 || best < TextCheckParams.familyGap) return [list];
+  return [sorted.sublist(0, cut), sorted.sublist(cut)];
 }
 
 /// Compare chaque mot du document aux autres mots de même corps : encre
@@ -69,16 +121,30 @@ CheckResult textConsistency(
     );
   }
 
-  // Regroupement par corps de texte (bandes de hauteur de ligne ~18 %).
+  // Regroupement par corps de texte (bandes de hauteur de ligne ~18 %) et
+  // par couleur d'encre : l'écriture au stylo de couleur n'est jamais
+  // comparée à l'encre d'impression.
   final buckets = <int, List<_Word>>{};
   for (final w in usable) {
     final k = (math.log(math.max(4.0, w.lineH)) / math.log(1.18)).round();
-    buckets.putIfAbsent(k, () => []).add(w);
+    final colored = w.sat >= TextCheckParams.coloredInkSat ? 1000 : 0;
+    buckets.putIfAbsent(k + colored, () => []).add(w);
+  }
+
+  // Familles légitimes d'un même corps : gras / normal (épaisseur du trait),
+  // impression / filigrane (niveau d'encre). Chaque mot est comparé à sa
+  // famille ; un mot retouché isolé reste un écart dans la sienne.
+  final groups = <List<_Word>>[];
+  for (final list in buckets.values) {
+    if (list.length < 12) continue;
+    for (final byStroke in _splitFamilies(list, (w) => w.stroke, 0.25)) {
+      groups.addAll(_splitFamilies(byStroke, (w) => w.darkness, 5.0));
+    }
   }
 
   var compared = 0;
-  for (final list in buckets.values) {
-    if (list.length < 12) continue;
+  for (final list in groups) {
+    if (list.length < TextCheckParams.minFamily) continue;
     compared += list.length;
     final d = [for (final w in list) w.darkness];
     final s = [for (final w in list) w.stroke];
@@ -105,8 +171,12 @@ CheckResult textConsistency(
     );
   }
 
-  final flagged = usable.where((w) => w.z >= 4.5).toList()
-    ..sort((a, b) => b.z.compareTo(a.z));
+  final flagged = [
+    for (final g in groups)
+      if (g.length >= TextCheckParams.minFamily)
+        for (final w in g)
+          if (w.z >= 4.5) w,
+  ]..sort((a, b) => b.z.compareTo(a.z));
   var score = 0.0;
   if (flagged.isNotEmpty) {
     score = clamp01((flagged.first.z - 4.0) / 6.0);
@@ -137,12 +207,13 @@ CheckResult textConsistency(
   final summary = flagged.isEmpty
       ? 'Encre et trait homogènes sur $compared mots comparés.'
       : '${flagged.length} mot(s) dont l’encre ou le trait diffère nettement '
-          '(sur $compared mots comparés).';
+            '(sur $compared mots comparés).';
   return CheckResult(
     id: CheckId.textConsistency,
     score: score,
     summary: summary,
     regions: regions,
+    version: TextCheckParams.version,
   );
 }
 
@@ -212,6 +283,7 @@ List<_Word> _extractWords(PageContext c, List<IRect> excluded, int page) {
     var x0 = c.w, y0 = c.h, x1 = 0, y1 = 0;
     var area = 0;
     var graySum = 0.0;
+    var satSum = 0.0;
     var perim = 0;
     var gradSum = 0.0;
     for (final g in w.glyphs) {
@@ -227,7 +299,9 @@ List<_Word> _extractWords(PageContext c, List<IRect> excluded, int page) {
           if (lab.labels[i] != id) continue;
           area++;
           graySum += c.gray[i];
-          final edge = x == 0 ||
+          satSum += c.sat[i];
+          final edge =
+              x == 0 ||
               y == 0 ||
               x == c.w - 1 ||
               y == c.h - 1 ||
@@ -246,8 +320,17 @@ List<_Word> _extractWords(PageContext c, List<IRect> excluded, int page) {
     w.ink = area;
     if (area == 0 || perim == 0) continue;
     w.darkness = graySum / area;
+    w.sat = satSum / area;
     w.stroke = 2 * area / perim;
     w.sharp = gradSum / perim;
   }
-  return words;
+  // Éléments graphiques (armoiries, logo, tableau) découpés en « mots » :
+  // bien plus hauts qu'une ligne de texte, ils ne sont pas du texte.
+  if (words.isEmpty) return words;
+  final heights = [for (final w in words) w.rect.h.toDouble()];
+  final maxH = median(heights) * TextCheckParams.maxWordHeightRatio;
+  return [
+    for (final w in words)
+      if (w.rect.h <= maxH) w,
+  ];
 }
