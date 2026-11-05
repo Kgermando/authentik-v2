@@ -1,7 +1,0 @@
-﻿Authentik v2 — installation Windows (MSIX sideload)
-
-1. Double-cliquez sur Install.bat et acceptez l'UAC administrateur.
-2. Le script installe le certificat éditeur puis le paquet .msix.
-
-Ne pas ouvrir Authentik_v2.msix seul : Windows refuse un paquet
-non signé par une racine approuvée (erreur 0x800B0109).
